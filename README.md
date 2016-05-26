@@ -1,9 +1,10 @@
 # Star-Citizen-Shell-Downloader
 
-This project requires bash, curl, awk, sed, grep and possible some other \*nix utility I've forgotten.
+This project requires bash, curl, awk, sed, grep and possibly some other \*nix utility I've forgotten.
 
 
-To run:
+To run: 
+
     chmod u+x star-citizen-downloader.sh
     ./star-citizen-downloader.sh
 
