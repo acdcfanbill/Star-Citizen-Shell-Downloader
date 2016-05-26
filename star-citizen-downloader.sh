@@ -15,18 +15,18 @@ PTU="Test_fileIndex"
 # Check to see which release they want
 echo "Please choose Public, or Test releases."
 echo "Public is the Live release, Test is the PTU"
-echo "Public - 1"
-echo "Test   - 2"
-echo "Exit   - other"
+echo -e "Public - 1\tTest   - 2\tExit   - other\n"
 read release
 
 
 # Pick the release we want
-if [ "${release}" -eq 1 ]; then
+if [ "${release}" -eq 1 ] 2>/dev/null; then
     RELEASE=$LIVE
-elif [ "${release}" -eq 2 ]; then
+elif [ "${release}" -eq 2 ] 2>/dev/null; then
     RELEASE=$PTU
 else
+    echo "Expecting a number."
+    echo "Neither release picked, exiting..."
     exit
 fi
 
