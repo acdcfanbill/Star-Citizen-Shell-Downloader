@@ -38,8 +38,8 @@ JSONURL=${JSONURL%$'\r'}
 
 if [ $DEBUG -ne 0 ]; then echo "JSON URL: ${JSONURL}"; fi
 
-EXE="curl -s $JSONURL"
 sleep 1
+EXE="curl -s $JSONURL"
 
 JSONCONTENTS=`$EXE`
 
