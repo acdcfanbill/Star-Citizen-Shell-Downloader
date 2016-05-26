@@ -1,7 +1,8 @@
 #!/bin/bash
 
+# Updated 05/2016
 # Shell test script by acdcfanbill
-# no support or warranty provided, share freely
+# no support or warranty provided, share freely, sorry if my code is awful
 
 #set -x
 
