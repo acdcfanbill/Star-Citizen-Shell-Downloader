@@ -96,10 +96,10 @@ if [[ -d "${PREFIX}" ]]; then
             echo "Unknown response. Continue download? (y/n)"
             read result
             result="${result,,}"
-            if [ "${result}" == "n" ]; then
-                echo "Exiting" && exit
-            fi
         done
+        if [ "${result}" == "n" ]; then
+            echo "Exiting" && exit
+        fi
     fi
 fi
 
@@ -119,7 +119,8 @@ done
 
 if [ $DEBUG -ne 0 ]; then echo file list: ${FILES[@]}; fi
 
-# We could strip out the webseed link from the json too, but this shouldn't change
+# We could strip out the webseed link from the json too, but this probably wont
+#  change so we're just going to hardcode it and keep hitting webseed 1
 WEBSEED="http://1.webseed.robertsspaceindustries.com/"
 
 # Now we can download each one.
