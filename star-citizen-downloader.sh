@@ -1,74 +1,105 @@
 #!/bin/bash
 
-# Updated 05/2016
-# Shell test script by acdcfanbill
-# no support or warranty provided, share freely, sorry if my code is awful
+# Updated 20160526
+#
+# Shell test script by acdcfanbill, AntonLacon
+#
+# This script is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Share freely.
 
 #set -x
 
-# Settings
-DEBUG=0
-LIVE="Public_fileIndex"
-PTU="Test_fileIndex"
+### START SETUP VARIABLES ###
 
+PN="${0##*/}" # PackageName
+DEBUG=0 # Verbose mode (default no)
+CONTINUE_DL=0 # Continue download (default no)
+RELEASE_FILEINDEX="Public_fileIndex" # Live/PTU release; override to PTU via cli arg (default Live)
 
-# Check to see which release they want
-echo "Please choose Public, or Test releases."
-echo "Public is the Live release, Test is the PTU"
-echo -e "Public - 1\tTest   - 2\tExit   - other\n"
-read release
+### END SETUP VARIABLES
+### START HELPER FUNCTIONS ###
 
+# die(msg, code) echo an abort message, and use the exit code if provided
+die() {
+    echo "$1"
+    if [ -n "$2" ]; then
+        exit "$2"
+    else
+        exit 1
+    fi
+}
 
-# Pick the release we want
-if [ "${release}" -eq 1 ] 2>/dev/null; then
-    RELEASE=$LIVE
-elif [ "${release}" -eq 2 ] 2>/dev/null; then
-    RELEASE=$PTU
-else
-    echo "Expecting a number."
-    echo "Neither release picked, exiting..."
-    exit
-fi
+# help() echo usage message of program
+help() {
+    echo "Usage: "${PN}" [-htv]"
+        echo "Parameters left blank will use default or cause an abort showing this message."
+        echo "  -h this help message"
+        echo "  -t download the testing PTU release instead of Live (default=Live)"
+        echo "  -v turn on verbose debugging messages (default=off)"
+        echo "  -y continue previous download if found (default=off)"
+}
 
+### END HELPER FUNCTIONS ###
+### COMMAND LINE ARGUMENT PARSER ###
+while getopts htvy OPT; do
+    case "${OPT}" in
+        h)
+            help && exit
+            ;;
+        t)
+            RELEASE_FILEINDEX="Test_fileIndex"
+            ;;
+        v)
+            DEBUG=1
+            ;;
+        y)
+            CONTINUE_DL=1
+            ;;
+        \?)
+            # abort on unknown argument
+            help && die
+            ;;
+    esac
+done
+
+# Clear out switches
+shift $((${OPTIND}-1))
+### END COMMAND LINE ARGUMENT PARSER ###
+### MAIN ###
 
 # Lets get the current release info
-JSONURL=`curl -s http://manifest.robertsspaceindustries.com/Launcher/_LauncherInfo | grep "${RELEASE}" | cut -d ' ' -f 3`
-# Need to strip the extra carriage return so curl doesn't puke
-JSONURL=${JSONURL%$'\r'}
+JSONURL=$( wget -q -O - http://manifest.robertsspaceindustries.com/Launcher/_LauncherInfo | grep "${RELEASE_FILEINDEX}" | cut -d ' ' -f 3 )
 
 if [ $DEBUG -ne 0 ]; then echo "JSON URL: ${JSONURL}"; fi
 
-sleep 1
-EXE="curl -s $JSONURL"
-
-JSONCONTENTS=`$EXE`
+JSONCONTENTS=$( wget -q -O - "${JSONURL}" )
 
 if [ $DEBUG -ne 0 ]; then echo "JSON: ${JSONCONTENTS}"; fi
 
-json="${JSONCONTENTS}"
-prop="file_list"
+FILEARRAY=$( echo $JSONCONTENTS | awk 'match($0, /\"file_list": \[[^\]]*\]/) { print substr($0, RSTART, RLENGTH) }' )
+PREFIX=$( echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed 's/"key_prefix\": "//g' | sed 's/"//g' )
 
-FILEARRAY=`echo $JSONCONTENTS | awk 'match($0, /\"file_list": \[[^\]]*\]/) { print substr($0, RSTART, RLENGTH) }'`
-PREFIX=`echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed 's/"key_prefix\": "//g' | sed 's/"//g'`
-
-if [ $DEBUG -ne 0 ]; then echo -e "prefix: $PREFIX"; fi
-if [ $DEBUG -ne 0 ]; then echo -e "file array:\n${FILEARRAY}"; fi
+if [ $DEBUG -ne 0 ]; then
+    echo -e "prefix: ${PREFIX}\nfile array:\n${FILEARRAY}"
+fi
 
 # Check to see if we have already downloaded this particular build
-if [ -d ${PREFIX} ]; then
-    echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
-    read result
-    if [ "$result" = "y" ]; then
-        echo "Continuing"
-    else
-        if [ "$result" == "n" ]; then
-            #ignoring
-            sleep 0
-        else 
-            echo "Bad option..."
-        fi
-        echo "Exiting..."
-        exit
+if [[ -d "${PREFIX}" ]]; then
+    if [[ "${CONTINUE_DL}" -ne 1 ]]; then
+        echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
+        read result
+        result="${result,,}" # convert result to lowercase
+        while [[ "${result}" != "y" && "${result}" != "n" ]]; do
+            echo "Unknown response. Continue download? (y/n)"
+            read result
+            result="${result,,}"
+            if [ "${result}" == "n" ]; then
+                echo "Exiting" && exit
+            fi
+        done
     fi
 fi
 
@@ -76,49 +107,48 @@ fi
 mkdir -p $PREFIX
 cd $PREFIX
 
-
 # Lets turn ourarray of files into an actual list
 TMPFILES=($FILEARRAY)
 # if [ $DEBUG ]; then for i in "${TMPFILES[@]}"; do echo $i; done; fi
 declare -a FILES
 size=$((${#TMPFILES[@]}-1))
-for((i=2;i<${size};i++))
-do
-    TMP=`echo ${TMPFILES[$i]} | tr -d ",$" | sed 's/"//g' `
+for((i=2;i<${size};i++)); do
+    TMP=$( echo ${TMPFILES[$i]} | tr -d ",$" | sed 's/"//g' )
     FILES+=(${TMP})
 done
 
 if [ $DEBUG -ne 0 ]; then echo file list: ${FILES[@]}; fi
 
-
 # We could strip out the webseed link from the json too, but this shouldn't change
 WEBSEED="http://1.webseed.robertsspaceindustries.com/"
-
 
 # Now we can download each one.
 WORKING_DIRECTORY=$PWD
 count=0
 max=${#FILES[@]}
-for file in ${FILES[@]};
-do
+for file in ${FILES[@]}; do
     count=$((count+1))
     dirpath=$(dirname $file)
     filename=$(basename $file)
     if [ $DEBUG -ne 0 ]; then echo "Currently doing..."; fi
     echo "File: $file (${count}/${max})"
-    if [ $DEBUG -ne 0 ]; then echo "Filename: $filename"; fi
-    if [ $DEBUG -ne 0 ]; then echo "Dirs: $dirpath"; fi
+    if [ $DEBUG -ne 0 ]; then
+        echo -e "Filename: $filename\nDirs: $dirpath"
+    fi
 
     # First, ensure the directories exist
     mkdir -p "${dirpath}"
     if [ $DEBUG -ne 0 ]; then
         pushd "${dirpath}"
-        curl -C - -o "${filename}" "${WEBSEED}${PREFIX}/${file}"
+        wget -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
         popd
     else
         pushd "${dirpath}" > /dev/null
-        curl -s -C - -o "${filename}" "${WEBSEED}${PREFIX}/${file}"
+        wget -q -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
         popd > /dev/null
     fi
 
 done
+
+# Job finished
+exit
