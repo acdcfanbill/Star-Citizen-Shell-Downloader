@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Updated 20160526
+# Updated 20160527
 #
 # Shell test script by acdcfanbill, AntonLacon
 #
