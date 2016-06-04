@@ -71,7 +71,7 @@ shift $((${OPTIND}-1))
 ### MAIN ###
 
 # Lets get the current release info
-JSONURL=$( wget -q -O - http://manifest.robertsspaceindustries.com/Launcher/_LauncherInfo | grep "${RELEASE_FILEINDEX}" | cut -d ' ' -f 3 )
+JSONURL=$( wget -q -O - http://manifest.robertsspaceindustries.com/Launcher/_LauncherInfo | grep "${RELEASE_FILEINDEX}" | cut -d ' ' -f 3 | tr -d '\r')
 
 if [ $DEBUG -ne 0 ]; then echo "JSON URL: ${JSONURL}"; fi
 
