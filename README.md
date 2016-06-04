@@ -22,7 +22,7 @@ If you want to see more info about what is going on, pass the verbose flag to th
 If there's enough interest I may keep updating this, or add more functionality that people may ask for. Thanks very much to AntonLacon who did some much needed updates and cleanup to this script.
 
 
-Updated 20160527
+Updated 20160604
 
 Shell test script by acdcfanbill, AntonLacon
 
