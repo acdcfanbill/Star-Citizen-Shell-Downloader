@@ -19,7 +19,7 @@ DEBUG=0 # Verbose mode (default no)
 CONTINUE_DL=0 # Continue download (default no)
 RELEASE_FILEINDEX="Public_fileIndex" # Live/PTU release; override to PTU via cli arg (default Live)
 
-### END SETUP VARIABLES
+### END SETUP VARIABLES ###
 ### START HELPER FUNCTIONS ###
 
 # die(msg, code) echo an abort message, and use the exit code if provided
@@ -34,12 +34,12 @@ die() {
 
 # help() echo usage message of program
 help() {
-    echo "Usage: "${PN}" [-htv]"
+    echo "Usage: "${PN}" [-htvy]"
         echo "Parameters left blank will use default or cause an abort showing this message."
         echo "  -h this help message"
         echo "  -t download the testing PTU release instead of Live (default=Live)"
         echo "  -v turn on verbose debugging messages (default=off)"
-        echo "  -y continue previous download if found (default=off)"
+        echo "  -y continue previous download if found (default=no)"
 }
 
 ### END HELPER FUNCTIONS ###
@@ -80,26 +80,24 @@ JSONCONTENTS=$( wget -q -O - "${JSONURL}" )
 if [ $DEBUG -ne 0 ]; then echo "JSON: ${JSONCONTENTS}"; fi
 
 FILEARRAY=$( echo $JSONCONTENTS | awk 'match($0, /\"file_list": \[[^\]]*\]/) { print substr($0, RSTART, RLENGTH) }' )
-PREFIX=$( echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed 's/"key_prefix\": "//g' | sed 's/"//g' )
+PREFIX=$( echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed -e 's/"key_prefix\": "//g' -e 's/"//g' )
 
 if [ $DEBUG -ne 0 ]; then
     echo -e "prefix: ${PREFIX}\nfile array:\n${FILEARRAY}"
 fi
 
 # Check to see if we have already downloaded this particular build
-if [[ -d "${PREFIX}" ]]; then
-    if [[ "${CONTINUE_DL}" -ne 1 ]]; then
-        echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
+if [[ -d "${PREFIX}" && "${CONTINUE_DL}" -ne 1 ]]; then
+    echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
+    read result
+    result="${result,,}" # convert result to lowercase
+    while [[ "${result}" != "y" && "${result}" != "n" ]]; do
+        echo "Unknown response. Continue download? (y/n)"
         read result
-        result="${result,,}" # convert result to lowercase
-        while [[ "${result}" != "y" && "${result}" != "n" ]]; do
-            echo "Unknown response. Continue download? (y/n)"
-            read result
-            result="${result,,}"
-        done
-        if [ "${result}" == "n" ]; then
-            echo "Exiting" && exit
-        fi
+        result="${result,,}"
+    done
+    if [ "${result}" == "n" ]; then
+        echo "Exiting" && exit
     fi
 fi
 
@@ -120,7 +118,7 @@ done
 if [ $DEBUG -ne 0 ]; then echo file list: ${FILES[@]}; fi
 
 # We could strip out the webseed link from the json too, but this probably wont
-#  change so we're just going to hardcode it and keep hitting webseed 1
+# change so we're just going to hardcode it and keep hitting webseed 1
 WEBSEED="http://1.webseed.robertsspaceindustries.com/"
 
 # Now we can download each one.
@@ -129,8 +127,14 @@ count=0
 max=${#FILES[@]}
 for file in ${FILES[@]}; do
     count=$((count+1))
-    dirpath=$(dirname $file)
-    filename=$(basename $file)
+    dirpath="${file%/*}"
+    filename="${file##*/}"
+
+    # bash substitution of dirname only works if "/" is present, ie directories present
+    if [ "${dirpath}" == "${filename}" ]; then
+        dirpath="."
+    fi
+
     if [ $DEBUG -ne 0 ]; then echo "Currently doing..."; fi
     echo "File: $file (${count}/${max})"
     if [ $DEBUG -ne 0 ]; then
@@ -140,13 +144,9 @@ for file in ${FILES[@]}; do
     # First, ensure the directories exist
     mkdir -p "${dirpath}"
     if [ $DEBUG -ne 0 ]; then
-        pushd "${dirpath}"
-        wget -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
-        popd
+        wget -c -O "${dirpath}/${filename}" "${WEBSEED}${PREFIX}/${file}"
     else
-        pushd "${dirpath}" > /dev/null
-        wget -q -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
-        popd > /dev/null
+        wget -q -c -O "${dirpath}/${filename}" "${WEBSEED}${PREFIX}/${file}"
     fi
 
 done
