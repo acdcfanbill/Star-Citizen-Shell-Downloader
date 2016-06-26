@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Updated 20160527
+# Updated 20160626
 #
 # Shell test script by acdcfanbill, AntonLacon
 #
@@ -101,11 +101,7 @@ if [[ -d "${PREFIX}" && "${CONTINUE_DL}" -ne 1 ]]; then
     fi
 fi
 
-# We are continuing, make the directory and change to it
-mkdir -p $PREFIX
-cd $PREFIX
-
-# Lets turn ourarray of files into an actual list
+# Convert JSONCONTENTS' file_array to a list of files for acting on
 TMPFILES=($FILEARRAY)
 # if [ $DEBUG ]; then for i in "${TMPFILES[@]}"; do echo $i; done; fi
 declare -a FILES
@@ -117,38 +113,34 @@ done
 
 if [ $DEBUG -ne 0 ]; then echo file list: ${FILES[@]}; fi
 
-# We could strip out the webseed link from the json too, but this probably wont
-# change so we're just going to hardcode it and keep hitting webseed 1
-WEBSEED="http://1.webseed.robertsspaceindustries.com/"
+# At present, CIG provides 64 webseeds, sequentially numbered.
+# Select a webseed to download at random for each file.
+NUMBER_OF_SEEDS=64
 
-# Now we can download each one.
-WORKING_DIRECTORY=$PWD
+# Download each file sequentially.
 count=0
 max=${#FILES[@]}
+
+echo "Downloading client..."
 for file in ${FILES[@]}; do
     count=$((count+1))
-    dirpath="${file%/*}"
-    filename="${file##*/}"
+    dirpath=$( dirname "${file}" )
 
-    # bash substitution of dirname only works if "/" is present, ie directories present
-    if [ "${dirpath}" == "${filename}" ]; then
-        dirpath="."
-    fi
+    # $RANDOM is 0 - 32,767. Use modulo and add 1 as webseed counts from 1 not 0.
+    RANDOM_SEED=$(( RANDOM%$NUMBER_OF_SEEDS+1 ))
+    # Webseed link could be stripped from JSONCONTENTS, but this probably won't
+    # change so hardcode the root.
+    WEBSEED="http://${RANDOM_SEED}.webseed.robertsspaceindustries.com/"
 
-    if [ $DEBUG -ne 0 ]; then echo "Currently doing..."; fi
-    echo "File: $file (${count}/${max})"
-    if [ $DEBUG -ne 0 ]; then
-        echo -e "Filename: $filename\nDirs: $dirpath"
-    fi
+    echo "File: $file (${count}/${max}) from server ${RANDOM_SEED}"
 
     # First, ensure the directories exist
-    mkdir -p "${dirpath}"
+    mkdir -p "${PREFIX}/${dirpath}" || die "failed to create an output directory"
     if [ $DEBUG -ne 0 ]; then
-        wget -c -O "${dirpath}/${filename}" "${WEBSEED}${PREFIX}/${file}"
+        wget -c -O "${PREFIX}/${file}" "${WEBSEED}${PREFIX}/${file}" || die "failed to download file"
     else
-        wget -q -c -O "${dirpath}/${filename}" "${WEBSEED}${PREFIX}/${file}"
+        wget -q -c -O "${PREFIX}/${file}" "${WEBSEED}${PREFIX}/${file}" || die "failed to download file"
     fi
-
 done
 
 # Job finished
