@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Updated 20160527
+# Updated 20160626
 #
 # Shell test script by acdcfanbill, AntonLacon
 #
@@ -19,7 +19,7 @@ DEBUG=0 # Verbose mode (default no)
 CONTINUE_DL=0 # Continue download (default no)
 RELEASE_FILEINDEX="Public_fileIndex" # Live/PTU release; override to PTU via cli arg (default Live)
 
-### END SETUP VARIABLES
+### END SETUP VARIABLES ###
 ### START HELPER FUNCTIONS ###
 
 # die(msg, code) echo an abort message, and use the exit code if provided
@@ -34,12 +34,12 @@ die() {
 
 # help() echo usage message of program
 help() {
-    echo "Usage: "${PN}" [-htv]"
+    echo "Usage: "${PN}" [-htvy]"
         echo "Parameters left blank will use default or cause an abort showing this message."
         echo "  -h this help message"
         echo "  -t download the testing PTU release instead of Live (default=Live)"
         echo "  -v turn on verbose debugging messages (default=off)"
-        echo "  -y continue previous download if found (default=off)"
+        echo "  -y continue previous download if found (default=no)"
 }
 
 ### END HELPER FUNCTIONS ###
@@ -80,34 +80,28 @@ JSONCONTENTS=$( wget -q -O - "${JSONURL}" )
 if [ $DEBUG -ne 0 ]; then echo "JSON: ${JSONCONTENTS}"; fi
 
 FILEARRAY=$( echo $JSONCONTENTS | awk 'match($0, /\"file_list": \[[^\]]*\]/) { print substr($0, RSTART, RLENGTH) }' )
-PREFIX=$( echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed 's/"key_prefix\": "//g' | sed 's/"//g' )
+PREFIX=$( echo $JSONCONTENTS | awk 'match($0, /\"key_prefix\": \"[^\"]*\"/) { print substr($0, RSTART, RLENGTH) }' | sed -e 's/"key_prefix\": "//g' -e 's/"//g' )
 
 if [ $DEBUG -ne 0 ]; then
     echo -e "prefix: ${PREFIX}\nfile array:\n${FILEARRAY}"
 fi
 
 # Check to see if we have already downloaded this particular build
-if [[ -d "${PREFIX}" ]]; then
-    if [[ "${CONTINUE_DL}" -ne 1 ]]; then
-        echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
+if [[ -d "${PREFIX}" && "${CONTINUE_DL}" -ne 1 ]]; then
+    echo "This build is either fully or partially downloaded.  Retry it? (y/n)"
+    read result
+    result="${result,,}" # convert result to lowercase
+    while [[ "${result}" != "y" && "${result}" != "n" ]]; do
+        echo "Unknown response. Continue download? (y/n)"
         read result
-        result="${result,,}" # convert result to lowercase
-        while [[ "${result}" != "y" && "${result}" != "n" ]]; do
-            echo "Unknown response. Continue download? (y/n)"
-            read result
-            result="${result,,}"
-        done
-        if [ "${result}" == "n" ]; then
-            echo "Exiting" && exit
-        fi
+        result="${result,,}"
+    done
+    if [ "${result}" == "n" ]; then
+        echo "Exiting" && exit
     fi
 fi
 
-# We are continuing, make the directory and change to it
-mkdir -p $PREFIX
-cd $PREFIX
-
-# Lets turn ourarray of files into an actual list
+# Convert JSONCONTENTS' file_array to a list of files for acting on
 TMPFILES=($FILEARRAY)
 # if [ $DEBUG ]; then for i in "${TMPFILES[@]}"; do echo $i; done; fi
 declare -a FILES
@@ -119,36 +113,34 @@ done
 
 if [ $DEBUG -ne 0 ]; then echo file list: ${FILES[@]}; fi
 
-# We could strip out the webseed link from the json too, but this probably wont
-#  change so we're just going to hardcode it and keep hitting webseed 1
-WEBSEED="http://1.webseed.robertsspaceindustries.com/"
+# At present, CIG provides 64 webseeds, sequentially numbered.
+# Select a webseed to download at random for each file.
+NUMBER_OF_SEEDS=64
 
-# Now we can download each one.
-WORKING_DIRECTORY=$PWD
+# Download each file sequentially.
 count=0
 max=${#FILES[@]}
+
+echo "Downloading client..."
 for file in ${FILES[@]}; do
     count=$((count+1))
-    dirpath=$(dirname $file)
-    filename=$(basename $file)
-    if [ $DEBUG -ne 0 ]; then echo "Currently doing..."; fi
-    echo "File: $file (${count}/${max})"
-    if [ $DEBUG -ne 0 ]; then
-        echo -e "Filename: $filename\nDirs: $dirpath"
-    fi
+    dirpath=$( dirname "${file}" )
+
+    # $RANDOM is 0 - 32,767. Use modulo and add 1 as webseed counts from 1 not 0.
+    RANDOM_SEED=$(( RANDOM%$NUMBER_OF_SEEDS+1 ))
+    # Webseed link could be stripped from JSONCONTENTS, but this probably won't
+    # change so hardcode the root.
+    WEBSEED="http://${RANDOM_SEED}.webseed.robertsspaceindustries.com/"
+
+    echo "File: $file (${count}/${max}) from server ${RANDOM_SEED}"
 
     # First, ensure the directories exist
-    mkdir -p "${dirpath}"
+    mkdir -p "${PREFIX}/${dirpath}" || die "failed to create an output directory"
     if [ $DEBUG -ne 0 ]; then
-        pushd "${dirpath}"
-        wget -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
-        popd
+        wget -c -O "${PREFIX}/${file}" "${WEBSEED}${PREFIX}/${file}" || die "failed to download file"
     else
-        pushd "${dirpath}" > /dev/null
-        wget -q -c -O "${filename}" "${WEBSEED}${PREFIX}/${file}"
-        popd > /dev/null
+        wget -q -c -O "${PREFIX}/${file}" "${WEBSEED}${PREFIX}/${file}" || die "failed to download file"
     fi
-
 done
 
 # Job finished
